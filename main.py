@@ -17,10 +17,10 @@ from models.lstm_model import build_lstm
 from models.rnn_model import build_rnn
 
 # Configurações
-WINDOW_SIZE = 60  # Janela de 60 minutos
+WINDOW_SIZE = 20  # Janela de 20 minutos (teste rápido)
 PREDICT_AHEAD = 5  # Prever 5 minutos à frente
-ROLLING_WINDOW = 100  # Janela móvel para métricas
-UPDATE_INTERVAL = 60  # Atualizar a cada 60 segundos (simulação)
+ROLLING_WINDOW = 10  # Janela móvel para métricas (teste rápido)
+UPDATE_INTERVAL = 2  # Atualizar a cada 2 segundos (teste rápido)
 
 class BTCPredictor:
     def __init__(self):
@@ -164,11 +164,25 @@ class BTCPredictor:
         
         def animate(frame):
             if len(self.actual_values) < 2:
+                # Mensagem em todos os subplots
+                ax1.clear(); ax1.set_title('Preços BTC/USD e Previsões'); ax1.set_ylabel('Preço (USD)')
+                ax1.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax1.transAxes)
+                ax2.clear(); ax2.set_title('Erro Acumulado'); ax2.set_ylabel('Erro Acumulado')
+                ax2.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax2.transAxes)
+                ax3.clear(); ax3.set_title('Métricas LSTM (Janela Móvel)'); ax3.set_ylabel('Erro')
+                ax3.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax3.transAxes)
+                ax4.clear(); ax4.set_title('Métricas RNN (Janela Móvel)'); ax4.set_ylabel('Erro')
+                ax4.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax4.transAxes)
                 return
             
             # Limpar gráficos
-            for ax in [ax1, ax2, ax3, ax4]:
+            for ax, title, ylabel in zip(
+                [ax1, ax2, ax3, ax4],
+                ['Preços BTC/USD e Previsões', 'Erro Acumulado', 'Métricas LSTM (Janela Móvel)', 'Métricas RNN (Janela Móvel)'],
+                ['Preço (USD)', 'Erro Acumulado', 'Erro', 'Erro']):
                 ax.clear()
+                ax.set_title(title)
+                ax.set_ylabel(ylabel)
             
             # Gráfico 1: Preços e Previsões
             ax1.plot(self.timestamps, self.actual_values, 'b-', label='Real', linewidth=2)
@@ -176,45 +190,121 @@ class BTCPredictor:
                 ax1.plot(self.timestamps, self.predictions_lstm, 'r--', label='LSTM', linewidth=1.5)
             if self.predictions_rnn:
                 ax1.plot(self.timestamps, self.predictions_rnn, 'g--', label='RNN', linewidth=1.5)
-            ax1.set_title('Preços BTC/USD e Previsões')
-            ax1.set_ylabel('Preço (USD)')
             ax1.legend()
             ax1.grid(True)
+            ax1.tick_params(axis='x', rotation=45)
+            if len(self.timestamps) > 20:
+                step = max(1, len(self.timestamps) // 20)
+                ax1.set_xticks(self.timestamps[::step])
             
             # Gráfico 2: Erro Acumulado
             if len(self.actual_values) > 1 and self.predictions_lstm and self.predictions_rnn:
                 error_lstm = np.array(self.actual_values) - np.array(self.predictions_lstm)
                 error_rnn = np.array(self.actual_values) - np.array(self.predictions_rnn)
-                
                 ax2.plot(self.timestamps, np.cumsum(error_lstm), 'r-', label='Erro LSTM', linewidth=2)
                 ax2.plot(self.timestamps, np.cumsum(error_rnn), 'g-', label='Erro RNN', linewidth=2)
-                ax2.set_title('Erro Acumulado')
-                ax2.set_ylabel('Erro Acumulado')
                 ax2.legend()
                 ax2.grid(True)
+                ax2.tick_params(axis='x', rotation=45)
+                if len(self.timestamps) > 20:
+                    step = max(1, len(self.timestamps) // 20)
+                    ax2.set_xticks(self.timestamps[::step])
+            else:
+                ax2.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax2.transAxes)
             
             # Gráfico 3: Métricas LSTM
             if self.metrics_history['lstm']['mae']:
                 ax3.plot(self.metrics_history['lstm']['mae'], 'r-', label='MAE', linewidth=2)
                 ax3.plot(self.metrics_history['lstm']['rmse'], 'g-', label='RMSE', linewidth=2)
-                ax3.set_title('Métricas LSTM (Janela Móvel)')
-                ax3.set_ylabel('Erro')
                 ax3.legend()
                 ax3.grid(True)
+            else:
+                ax3.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax3.transAxes)
             
             # Gráfico 4: Métricas RNN
             if self.metrics_history['rnn']['mae']:
                 ax4.plot(self.metrics_history['rnn']['mae'], 'r-', label='MAE', linewidth=2)
                 ax4.plot(self.metrics_history['rnn']['rmse'], 'g-', label='RMSE', linewidth=2)
-                ax4.set_title('Métricas RNN (Janela Móvel)')
-                ax4.set_ylabel('Erro')
                 ax4.legend()
                 ax4.grid(True)
+            else:
+                ax4.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax4.transAxes)
             
             plt.tight_layout()
         
         return fig, animate
     
+    def save_individual_plots(self):
+        """Salva cada gráfico em arquivo separado na pasta plots/"""
+        import matplotlib.pyplot as plt
+        os.makedirs('plots', exist_ok=True)
+        # 1. Preços e Previsões
+        fig1, ax1 = plt.subplots(figsize=(8, 5))
+        ax1.set_title('Preços BTC/USD e Previsões')
+        ax1.set_ylabel('Preço (USD)')
+        ax1.plot(self.timestamps, self.actual_values, 'b-', label='Real', linewidth=2)
+        if self.predictions_lstm:
+            ax1.plot(self.timestamps, self.predictions_lstm, 'r--', label='LSTM', linewidth=1.5)
+        if self.predictions_rnn:
+            ax1.plot(self.timestamps, self.predictions_rnn, 'g--', label='RNN', linewidth=1.5)
+        ax1.legend()
+        ax1.grid(True)
+        ax1.tick_params(axis='x', rotation=45)
+        if len(self.timestamps) > 20:
+            step = max(1, len(self.timestamps) // 20)
+            ax1.set_xticks(self.timestamps[::step])
+        plt.tight_layout()
+        plt.savefig('plots/plot_precos_previsoes.png', dpi=300)
+        plt.close(fig1)
+        # 2. Erro Acumulado
+        fig2, ax2 = plt.subplots(figsize=(8, 5))
+        ax2.set_title('Erro Acumulado')
+        ax2.set_ylabel('Erro Acumulado')
+        if len(self.actual_values) > 1 and self.predictions_lstm and self.predictions_rnn:
+            error_lstm = np.array(self.actual_values) - np.array(self.predictions_lstm)
+            error_rnn = np.array(self.actual_values) - np.array(self.predictions_rnn)
+            ax2.plot(self.timestamps, np.cumsum(error_lstm), 'r-', label='Erro LSTM', linewidth=2)
+            ax2.plot(self.timestamps, np.cumsum(error_rnn), 'g-', label='Erro RNN', linewidth=2)
+            ax2.legend()
+        else:
+            ax2.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax2.transAxes)
+        ax2.grid(True)
+        ax2.tick_params(axis='x', rotation=45)
+        if len(self.timestamps) > 20:
+            step = max(1, len(self.timestamps) // 20)
+            ax2.set_xticks(self.timestamps[::step])
+        plt.tight_layout()
+        plt.savefig('plots/plot_erro_acumulado.png', dpi=300)
+        plt.close(fig2)
+        # 3. Métricas LSTM
+        fig3, ax3 = plt.subplots(figsize=(8, 5))
+        ax3.set_title('Métricas LSTM (Janela Móvel)')
+        ax3.set_ylabel('Erro')
+        if self.metrics_history['lstm']['mae']:
+            ax3.plot(self.metrics_history['lstm']['mae'], 'r-', label='MAE', linewidth=2)
+            ax3.plot(self.metrics_history['lstm']['rmse'], 'g-', label='RMSE', linewidth=2)
+            ax3.legend()
+        else:
+            ax3.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax3.transAxes)
+        ax3.grid(True)
+        plt.tight_layout()
+        plt.savefig('plots/plot_metricas_lstm.png', dpi=300)
+        plt.close(fig3)
+        # 4. Métricas RNN
+        fig4, ax4 = plt.subplots(figsize=(8, 5))
+        ax4.set_title('Métricas RNN (Janela Móvel)')
+        ax4.set_ylabel('Erro')
+        if self.metrics_history['rnn']['mae']:
+            ax4.plot(self.metrics_history['rnn']['mae'], 'r-', label='MAE', linewidth=2)
+            ax4.plot(self.metrics_history['rnn']['rmse'], 'g-', label='RMSE', linewidth=2)
+            ax4.legend()
+        else:
+            ax4.text(0.5, 0.5, 'Aguardando dados suficientes...', ha='center', va='center', fontsize=14, color='gray', transform=ax4.transAxes)
+        ax4.grid(True)
+        plt.tight_layout()
+        plt.savefig('plots/plot_metricas_rnn.png', dpi=300)
+        plt.close(fig4)
+
     def run_simulation(self, duration_minutes=30):
         """Executa simulação contínua"""
         print(f"🚀 Iniciando simulação por {duration_minutes} minutos...")
@@ -286,6 +376,9 @@ class BTCPredictor:
         print("\n✅ Simulação concluída!")
         print("📁 Gráficos salvos em plots/")
         
+        # Salvar gráficos individuais
+        self.save_individual_plots()
+
         plt.show()
 
 def parse_arguments():
